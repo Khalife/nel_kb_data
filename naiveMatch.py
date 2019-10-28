@@ -15,17 +15,22 @@ def getMatchingDicFromKB(kb_filename):
     mentionNameToGoldId = {}
     lookup_id_to_text = {}
 
+    returnDict = {}
     kb_file = open(kb_filename, "r")
     for line in kb_file:
         nb_line += 1
         dic_line = json.loads(line)
         dic_new = dict(dic_line)
         del dic_new["entity_text"]
-        mentionNameToGoldId[dic_line["entity_name"]] = [dic_new]
+        del dic_new["entity_links"]
         if nb_line % 100000 == 0:
             print(nb_line)
 
-    return mentionNameToGoldId 
+        #returnDict["entity_id"] = mentionNameToGoldId["entity_id"]
+        #returnDict["entity_type"] = mentionNameToGoldId["entity_type"]
+        returnDict[dic_line["entity_name"].lower().replace("_", " ")] = [dic_new]
+
+    return returnDict
 
 
 def updateDicFromTrain(file_train, matchingDic):
@@ -58,9 +63,32 @@ def updateDicFromTrain(file_train, matchingDic):
             non_unique_entity += 1
             for eid in matchingDicNew[dic_line["mention_name"]]:
                 supplementary_ids.append(eid)
-    
+   
+    #returnDict = {}
+    #pdb.set_trace()
+    #returnDict["entity_id"] = matchingDicNew["entity_id"]
+    #returnDict["entity_type"] = matchingDicNew["entity_type"]
+    #returnDict["entity_name"] = matchingDicNew["entity_name"]
+    #return returnDict
     return matchingDicNew
 
+def naiveMatchQuery(dic_line, matchingDict):
+    mention_id = dic_line["mention_id"]
+    try:
+        predictedDics = matchingDict[dic_line["mention_name"].lower().replace("_", " ")]
+    except:
+        return {mention_id: "ENone"}
+    predictedTypes = [pd["entity_type"] for pd in predictedDics] 
+    predictedId = [pd["entity_id"] for pd in predictedDics]
+    mention_type = dic_line["gold_entity_type"]
+    dic_prediction = {}
+    if mention_type in predictedTypes:
+        final_predicted_index = predictedTypes.index(mention_type) 
+        final_predicted_id = predictedId[final_predicted_index]
+        dic_prediction[mention_id] = final_predicted_id 
+        return dic_predictions
+    else:
+        return {mention_id: "ENone"}
 
 
 def naiveMatch(file_test, mentionNameToGoldId):
@@ -111,8 +139,15 @@ if __name__ == "__main__":
     except:
         print("No train file")
 
+    pdb.set_trace()
+    with open("matchingDict.json", "w") as f:
+        json.dump(matchingDic ,f)
+                                              
+    import sys
+    sys.exit()
+
     dic_prediction, missed_mentions, gold_match  = naiveMatch(filename_test, matchingDic) 
-   
+    
     score_naive_match = 0
     for key in dic_prediction.keys():
         if dic_prediction[key] == gold_match[key]:

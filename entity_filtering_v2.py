@@ -9,6 +9,7 @@ import string
 import unicodedata
 from math import log
 import re
+import naiveMatch
 rx = re.compile(r"[\W]")
 
 
@@ -147,8 +148,10 @@ with open("idf_diag.json", "r") as f:
 with open("entityIdToName_micro_kb.json", "r") as f:
     idToName = json.load(f)
 
+with open("matchingDict.json", "r") as f:
+    matchingDict = json.load(f)
 
-def treatQueryFromJson(query):
+def treatQueryFromJson(query, matchingDict):
     start = time.time()
     time1 = 0
     time2 = 0
@@ -158,6 +161,10 @@ def treatQueryFromJson(query):
     time_1cs = 0
     time_2cs = 0
     time_3cs = 0
+    
+    result_naive = naiveMatch.naiveMatchQuery(query, matchingDict) 
+    if [val for val in result_naive.values()][0] != "ENone":
+        return result_naive
 
     query_type = query["gold_entity_type"]
     query_text = query["query_text"]
@@ -201,7 +208,7 @@ def treatQueryFromJson(query):
     #######################################
     ############## Name score ##############
     #######################################
-    mention_name = query["query_name"]
+    mention_name = query["mention_name"]
     total_gram_scores = {}
     _, acronym_test = acronymTest(mention_name, "PER")
     if acronym_test:
@@ -217,7 +224,7 @@ def treatQueryFromJson(query):
         two_grams = []
         three_grams = []
         four_grams = []
-        query_name = query["query_name"].lower()
+        query_name = query["mention_name"].lower()
         query_name =  query_name.replace("_", " ")
         query_name = re.sub(rx, " ", query_name)
 
@@ -281,7 +288,7 @@ def treatQueryFromJson(query):
     return results
 
 
-result = treatQueryFromJson({"query_name":"United state", "query_text": "this country is blabla", "gold_entity_type": "Country"})
+result = treatQueryFromJson({"mention_id": 0, "mention_name":"United state", "query_text": "this country is blabla", "gold_entity_type": "Country"}, matchingDict)
 
 
 pdb.set_trace()
