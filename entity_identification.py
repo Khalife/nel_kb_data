@@ -56,18 +56,18 @@ def graphOfWords(text):
 
 import time
 
-def returnXDataLine(dic_line):
-    # input_dic example: {"mention_id" : 1, "mention_text_features": [0,1,3,4], "entity_ranks": {"E1": [name_score, context_score], "E10": [name_score, context_score]}}
+def returnXDataLine(dic_line, K=10):
+    # input_dic example: {"mention_id" : 1, "mention_text_features": [0,1,3,4], "score_results": {"E1": [name_score, context_score], "E10": [name_score, context_score]}}
     #dic_line = json.loads(dic_line)
 
     start = time.time()
     mention_id = dic_line["mention_id"]
     no_kernel = False
     X_mention = []
-    candidate_entities = dic_line["entity_ranks"]
+    candidate_entities = dic_line["score_results"][:K]
    
     #text = mentionIdToText[mention_id]
-    text = dic_line["mention_text_features"]
+    text = dic_line["mention_text_words"]
     H_gk = graphOfWords(text) 
     
     gk_q = grakel_all.GraphKernel(kernel=dict(name="pyramid_match", with_labels=True), normalize=True)
@@ -75,43 +75,32 @@ def returnXDataLine(dic_line):
      
     print("gow done")
     dic_return = {"mention_id": mention_id}
-    candidate_entities = [(key, candidate_entities[key][0], candidate_entities[key][1]) for key in candidate_entities.keys()]
-    for ceo in candidate_entities[:10]:
+    #candidate_entities = [(key, candidate_entities[key][0], candidate_entities[key][1]) for key in candidate_entities.keys()]
+
+    for ceo in candidate_entities:
         #print(ceo[0])
         X_line = []    
-        ce = ceo[0]
+        ce = ceo["entity_id"]
 
-        X_line.append(ceo[1])
-        X_line.append(ceo[2])
+        X_line.append(ceo["name_score"])
+        X_line.append(ceo["context_score"])
     
         type_features = []
         indexes = []
         counter_type = -1
         ce_neighbors_total = [(nei, entityIdToType[nei]) for nei in  id_to_neighbors[ce]]
-        #types2 = list(set([x[1] for x in ce_neighbors_total]))
         ce_neighbors_total = [x[0] for x in ce_neighbors_total]
         
         for type_ in types2:
             counter_type += 1
             ce_neighbors = []
             nb_nei_limit = 0 
-            #pdb.set_trace()
             ce_neighbors = [nei for nei in  ce_neighbors_total if entityIdToType[nei] == type_]
-            #neis_types = []
-            ##print("ok0")
-            #for nei in ce_neighbors:
-            #    try: 
-            #        neis_types.append(ontology_map[depth][entityIdToType[nei]])
-            #    except:
-            #        neis_types.append(entityIdToType[nei])
             neighbors_of_type = {nei: len(id_to_neighbors[nei]) for nei in ce_neighbors}
             sorted_x = sorted(neighbors_of_type.items(), key=lambda x: x[1], reverse=True)
             neighbors_of_type = [sx[0] for sx in sorted_x][:3] 
             type_text = [] 
-            #print("ok1")
-            #print(len(neighbors_of_type))
             for i in range(len(neighbors_of_type)):
-                #text_limited = " ".join(entityIdToText[ceo[0]].split()[:100])
                 text_limited = " ".join(entityIdToText[neighbors_of_type[i]].split()[:100])
                 type_text.append(text_limited)
             type_text = " ".join(type_text)
@@ -119,8 +108,10 @@ def returnXDataLine(dic_line):
             if len(neighbors_of_type) == 0:
                 type_features.append([{0: [0]}, {0 :0}])
             else:
-                type_features.append(graphOfWords(type_text))
+                type_features.append(graphOfWords(type_text.split()))
                 indexes.append(counter_type)
+            #if type_ == "City":
+            #    pdb.set_trace()
     
         if len(indexes) > 0:   
             graph_kernel_scores =  gk_q.transform([type_features[i] for i in indexes]).tolist()
@@ -140,7 +131,7 @@ def returnXDataLine(dic_line):
 
     end = time.time()
     print("TIME: " + str(end - start))
-    
+    #pdb.set_trace()    
     return dic_return
 
 
@@ -153,59 +144,36 @@ def loadF(x):
     dic_x = json.loads(x)
     return (dic_x["gold_entity_id"], dic_x["mention_text_features"])
 
-#############################################################################################################################
-#############################################################################################################################
-#print("Getting id to text...")
-#rdd_train = sc.textFile("filtering_results_results_filtering_frequency_aida_vectorizer_aida_test_final_clean_names_train_shuffle_clean.csv")
-#rdd_test = sc.textFile("filtering_results_results_filtering_frequency_aida_vectorizer_aida_test_final_clean_names.json")
-#
-#get_entity_ids_train = rdd_train.map(lambda x: getEntityIds(x)).collect()
-#mention_ids_train = rdd_train.map(lambda x : json.loads(x)["mention_id"]).collect()
-#
-#get_entity_ids_test = rdd_test.map(lambda x: getEntityIds(x)).collect()
-#mention_ids_test = rdd_test.map(lambda x : json.loads(x)["mention_id"]).collect()
-#
-#entity_ids_concerned = list(set(sum(get_entity_ids_train + get_entity_ids_test, [])))
-#
-#mention_ids_concerned = mention_ids_train + mention_ids_test
-#mentionsTextFeatures = sc.textFile("all_v_mentionsJsonFileComplete-COnLL-UPDATE-NNIL.json").filter(lambda x : json.loads(x)["mention_id"] in mention_ids_concerned).map(lambda x: loadF(x)).collect()
-#
-#mentionIdToTextFeatures = {}
-#for mf in mentionsTextFeatures:
-#    mentionIdToTextFeatures[mf[0]] = mf[1]
-#
-#json.dump(mentionIdToTextFeatures, open("mentionIdToTextFeatures.json", "w"))
-#
-#id_to_neighbors = json.load(open("conll_id_to_neighbors.json", "r"))
-#entity_ids_neighbors = sum([id_to_neighbors[eic] for eic in entity_ids_concerned], [])
-#entity_ids_concerned = entity_ids_concerned + list(set(entity_ids_neighbors))
-#print("Step 1")
-#kbFileName = "aida_vectorizer_aida_test_final_clean_names.json"
-#listIdTextFeatures = sc.textFile(kbFileName).map(lambda x: json.loads(x)).filter(lambda x : x["entity_id"] in entity_ids_concerned).map(lambda x: (x["entity_id"], x["features"])).collect()
-#entityIdToTextFeatures = {}
-#for litf in listIdTextFeatures:
-#    entityIdToText[litf[0]] = litf[1]
-#
-#json.dump(entityIdToTextFeatures, open("entityIdToTextFeatures.json", "w"))
-#assert(0)
-#############################################################################################################################
 
-#############################################################################################################################
-#############################################################################################################################
+def getTrainingSamples(x):
+    gold_entity_id = x["gold_entity_id"]
+    X = []
+    Y = []
 
-#id_to_neighbors = json.load(open("conll_id_to_neighbors.json", "r"))
-#id_to_neighbors = sc.broadcast(id_to_neighbors)
-#dic_test = json.load(open("idsToTextTest.json", "r"))
-#dic_train = json.load(open("idsToTextTrain.json", "r"))
-#
-#def merge_two_dicts(x, y):
-#    z = x.copy()   # start with x's keys and values
-#    z.update(y)    # modifies z with y's keys and values & returns None
-#    return z
-#
-#entityIdToText = merge_two_dicts(dic_train, dic_test) 
 
-#mentionIdToText = json.load(open("concat_mentionIdToText_conll.json", "r"))
+    if gold_entity_id not in [xx["entity_id"] for xx in x["score_results"]]:
+        return [], []
+
+    X_features = returnXDataLine(x) 
+    for eid in X_features.keys():
+        if eid[0] == "E": 
+            if eid == gold_entity_id:
+                y = 1
+            else:
+                y = 0
+        
+            X.append(X_features[eid])
+            Y.append(y)
+
+    n_x = len(X)
+    if n_x < 10:
+        for ix in range(10-n_x):
+            X.append([0. for i in range(len(X[0]))])
+            Y.append(0)
+
+    return X, Y    
+
+#########################################################################################
 
 entityIdToText = json.load(open("entityIdToText_micro_kb.json", "r"))
 entityIdToTextFeatures = json.load(open("entityIdToTextFeatures.json", "r"))
@@ -227,13 +195,71 @@ for ty in types_init:
 types2 = list(set(types2))
 
 
-
+# EXAMPLE INFERENCE
 #dic_line = {"mention_id"= "0", "mention_text_features": [0,1,3,4], "entity_ranks": {"E1": [name_score, ], "E10": [name_score, context_score]}}
 
-with open("identification_example.json", "r") as f:
-    dic_line = json.load(f)
+#with open("identification_example.json", "r") as f:
+#    dic_line = json.load(f)
+#
+#mentionIdToText = {dic_line["mention_id"]: dic_line["mention_text_features"]}
+#x_dic = returnXDataLine(dic_line)
 
-mentionIdToText = {dic_line["mention_id"]: dic_line["mention_text_features"]}
-x_dic = returnXDataLine(dic_line)
+X_train = []
+Y_train = []
+index_line = 0
+with open("training_samples_micro_kb.json", "r") as f:
+    for line in f:
+        dic_line = json.loads(line)
+        X_line, Y_line = getTrainingSamples(dic_line)
+        X_train = X_train + X_line
+        Y_train = Y_train + Y_line
+        index_line += 1
+        print(index_line)
+        if index_line == 10:
+            break
+
+
+
+
+
+##################################################################################################################################
+
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn import tree
+
+from sklearn.linear_model import Ridge
+from sklearn import datasets, linear_model
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.decomposition import PCA
+# All dataset
+results_gold = []
+#
+if 1:
+    # No PCA
+    n_samples = len(Y_train)
+    nb_samples_entities = n_samples/10
+    n_train = int(nb_samples_entities*0.5)*10
+    Y_test = Y_train[n_train:]
+    Y_train = Y_train[:n_train]
+    X_train_dim = X_train[:n_train]
+    X_test_dim = X_train[n_train:]
+
+    nb_entities_test = len(X_test_dim)/10
+    for penal in [0.0001, 0.0005, 0.001, 0.01, 0.1, 0.5, 1, 2, 5, 10]:
+        scores = 0
+        print(penal)
+        predictor = 6
+        regr_2 = linear_model.LogisticRegression(C = penal, class_weight = "balanced")
+        regr_2.fit(X_train_dim,Y_train)
+        results = regr_2.predict_proba(X_test_dim).tolist()
+        results = [res[1] for res in results]
+
+        n_results_batch = len(results)/10
+        for i in range(n_results_batch):
+            imax = np.argmax(results[i*10:(i+1)*10])    
+            score_i = int(Y_test[i*10:(i+1)*10][imax] == 1)
+            scores += 1
+            
+        pdb.set_trace()        
 
 pdb.set_trace()
